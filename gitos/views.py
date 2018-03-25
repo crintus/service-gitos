@@ -1,4 +1,5 @@
 import os
+import re
 
 from collections import OrderedDict
 from logging import getLogger
@@ -15,10 +16,10 @@ from gitos.pagination import ResultsSetPagination
 from gitos.authentication import AdminAuthentication
 from gitos.serializers import (
     ActivateSerializer, DeactivateSerializer, AdminCompanySerializer,
-    CurrencySerializer
+    CurrencySerializer, GithubBountiesSerializer, CreateGithubBountiesSerializer
 )
 from gitos.models import (
-    Currency, User
+    Currency, User, GithubIssueBounty
 )
 
 logger = getLogger('django')
@@ -36,7 +37,7 @@ def root(request, format=None):
                 ('Deactivate', reverse('gitos:deactivate',
                     request=request,
                     format=format)),
-                ('Verify', reverse('gitos:verify',
+                ('Issue Bounties', reverse('gitos:github-bounties-view',
                     request=request,
                     format=format))
             ])},
@@ -163,27 +164,37 @@ class GithubView(GenericAPIView):
 
         pull_request = request.data.get('pull_request')
         pr_id = pull_request.get('id')
-        action = request.data.get('action')
         merged = pull_request.get('merged')
         user = pull_request.get('user')
+        issue_url = pull_request.get('issue_url')
+        body = pull_request.get('body')
+        action = request.data.get('action')
         username = user.get('login')
 
         try:
             _user = User.objects.get(username=username)
             try:
-                user = rehive.admin.users.get(_user.identifier)
+                user = rehive.admin.users.get(str(_user.identifier))
             except APIException:
                 user = rehive.admin.users.create()
         except User.DoesNotExist:
             user = rehive.admin.users.create()
             User.objects.create(
                 identifier=user.get('identifier'),
-                username=user.get('username')
+                username=username
             )
+
+        r = re.search(r'\#([\d]+)', body)
+
+        if r:
+            try:
+                amount = GithubIssueBounty.objects.get(issue_nr=r.group(1)).amount
+            except GithubIssueBounty.DoesNotExist:
+                amount = 1
 
         if action == 'opened':
             tx = rehive.admin.transactions.create_credit(
-                user=user.identifier, amount=1, status='pending', reference=str(pr_id)
+                user=user.get('identifier'), amount=amount, currency='GITOS', status='pending', reference=str(pr_id)
             ).get('id')
         elif action == 'closed':
             _tx = rehive.admin.transactions.get(
@@ -194,10 +205,51 @@ class GithubView(GenericAPIView):
             else:
                 tx = rehive.admin.transactions.fail(_tx.get('id'))
 
+            GithubIssueBounty.close(issue_url)
+
         return Response(
             {'status': 'success', 'data': tx},
             status=status.HTTP_201_CREATED
         )
+
+
+class GithubBountiesListView(GenericAPIView):
+    allowed_methods = ('POST', 'GET')
+    permission_classes = (AllowAny, )
+    serializer_class = GithubBountiesSerializer
+
+    def get_serializer_class(self):
+        if self.request.method in ('POST'):
+            return CreateGithubBountiesSerializer
+        return GithubBountiesSerializer
+
+    def get(self, request, *args, **kwargs):
+        serializer = self.get_serializer(
+            GithubIssueBounty.objects.all(),
+            many=True
+        )
+        return Response({'status': 'success', 'data': serializer.data})
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {'status': 'success', 'data': serializer.data},
+            status=status.HTTP_201_CREATED
+        )
+
+
+class GithubBountiesView(GenericAPIView):
+    allowed_methods = ('GET',)
+    serializer_class = GithubBountiesSerializer
+    authentication_classes = (AllowAny,)
+
+    def get(self, request, *args, **kwargs):
+        serializer = self.get_serializer(
+            GithubIssueBounty.objects.get(pk=kwargs.get('id'))
+        )
+        return Response({'status': 'success', 'data': serializer.data})
 
 
 class VerifyView(GenericAPIView):

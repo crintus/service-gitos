@@ -12,6 +12,8 @@ urlpatterns = (
 
     # Github
     url(r'^github/$', views.GithubView.as_view(), name='github-pr-view'),
+    url(r'^github/bounties/$', views.GithubBountiesListView.as_view(), name='github-bounties-view'),
+    url(r'^github/bounties/(?P<id>.*)/$', views.GithubBountiesView.as_view(), name='github-bounties-view'),
 
     # Admin
     url(r'^admin/company/$', views.AdminCompanyView.as_view(), name='admin-company'),

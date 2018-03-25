@@ -1,6 +1,9 @@
 import uuid
 
+from enumfields import EnumField
 from django.db import models
+from gitos.fields import MoneyField
+from gitos.enums import GithubIssueBountyStatus
 
 
 class DateModel(models.Model):
@@ -55,3 +58,19 @@ class Currency(DateModel):
 
     def __str__(self):
         return str(self.code)
+
+
+class GithubIssueBounty(DateModel):
+    issue_nr = models.IntegerField()
+    url = models.URLField()
+    amount = MoneyField()
+    status = EnumField(GithubIssueBountyStatus, max_length=50)
+
+    @classmethod
+    def close(cls, issue_url: str) -> bool:
+        try:
+            bty = cls.objects.get(url=issue_url)
+        except cls.DoesNotExist:
+            return False
+        else:
+            return bty.delete()

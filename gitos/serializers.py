@@ -1,10 +1,21 @@
 import uuid
 
+from decimal import Decimal
+
 from rehive import Rehive, APIException
 from rest_framework import serializers
 from django.db import transaction
 
-from gitos.models import Company, User, Currency
+from gitos.models import Company, User, Currency, GithubIssueBounty
+from gitos.enums import GithubIssueBountyStatus
+
+
+def to_cents(amount: Decimal, divisibility: int) -> int:
+    return int(amount * Decimal('10')**divisibility)
+
+
+def from_cents(amount: int, divisibility: int) -> Decimal:
+    return Decimal(amount) / Decimal('10')**divisibility
 
 
 class ActivateSerializer(serializers.Serializer):
@@ -117,3 +128,30 @@ class CurrencySerializer(serializers.ModelSerializer):
         fields = (
             'code', 'description', 'symbol', 'unit', 'divisibility', 'enabled',
         )
+
+
+class GithubBountiesSerializer(serializers.ModelSerializer):
+    status = serializers.CharField(source='status.value', read_only=True)
+    amount = serializers.SerializerMethodField(source='get_amount')
+
+    class Meta:
+        model = GithubIssueBounty
+        fields = ('issue_nr', 'url', 'amount', 'status')
+
+    def get_amount(self, fee):
+        amount = Decimal(str(fee.amount))
+        return to_cents(amount, 0)
+
+
+class CreateGithubBountiesSerializer(serializers.ModelSerializer):
+    amount = serializers.IntegerField(min_value=0, write_only=True)
+    status = serializers.ChoiceField(choices=GithubIssueBountyStatus.choices(),
+        write_only=True)
+
+    class Meta:
+        model = GithubIssueBounty
+        fields = '__all__'
+
+    def validate(self, validated_data):
+        validated_data['status'] = GithubIssueBountyStatus(validated_data.get('status'))
+        return validated_data
