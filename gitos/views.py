@@ -13,7 +13,7 @@ from rest_framework.reverse import reverse
 from rest_framework.decorators import api_view, permission_classes
 
 from gitos.pagination import ResultsSetPagination
-from gitos.authentication import AdminAuthentication
+from gitos.authentication import AdminAuthentication, UserAuthentication
 from gitos.serializers import (
     ActivateSerializer, DeactivateSerializer, AdminCompanySerializer,
     CurrencySerializer, GithubBountiesSerializer, CreateGithubBountiesSerializer
@@ -255,12 +255,12 @@ class GithubBountiesView(GenericAPIView):
 class VerifyView(GenericAPIView):
     allowed_methods = ('GET',)
     permission_classes = (AllowAny, )
+    authentication_classes = (UserAuthentication, )
 
     def get(self, request, *args, **kwargs):
-        rehive = Rehive()
-        data = rehive.auth.tokens.verify(os.environ.get('REHIVE_AUTH_TOKEN'))
-
         return Response({
             'status': 'success',
-            'data': data
+            'data': [
+                print(request),
+            ]
         })
