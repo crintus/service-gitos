@@ -1,4 +1,5 @@
 import uuid
+import os
 
 from django.utils.translation import ugettext_lazy as _
 from django.utils.encoding import smart_text
@@ -35,8 +36,10 @@ class AdminAuthentication(HeaderAuthentication):
     """
 
     def authenticate(self, request):
-        token = self.get_auth_header(request)
-        # token = "" #Overide token for testing
+        if os.environ.get('DEBUG'):
+            token = os.environ.get('REHIVE_AUTH_TOKEN')
+        else:
+            token = self.get_auth_header(request)
 
         rehive = Rehive(token)
 

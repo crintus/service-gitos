@@ -1,5 +1,8 @@
+import os
+
 from collections import OrderedDict
 from logging import getLogger
+from rehive import Rehive, APIException
 
 from rest_framework import status, filters, exceptions
 from rest_framework.generics import GenericAPIView
@@ -14,7 +17,9 @@ from gitos.serializers import (
     ActivateSerializer, DeactivateSerializer, AdminCompanySerializer,
     CurrencySerializer
 )
-from gitos.models import Currency
+from gitos.models import (
+    Currency, User
+)
 
 logger = getLogger('django')
 
@@ -29,6 +34,9 @@ def root(request, format=None):
                     request=request,
                     format=format)),
                 ('Deactivate', reverse('gitos:deactivate',
+                    request=request,
+                    format=format)),
+                ('Verify', reverse('gitos:verify',
                     request=request,
                     format=format))
             ])},
@@ -137,3 +145,70 @@ class AdminCurrencyView(GenericAPIView):
 
         serializer = self.get_serializer(currency)
         return Response({'status': 'success', 'data': serializer.data})
+
+
+class GithubView(GenericAPIView):
+    allowed_methods = ('POST',)
+    permission_classes = (AllowAny,)
+
+    def post(self, request, *args, **kwargs):
+
+        if not request.data.get('pull_request'):
+            return Response(
+                {'status': 'success', 'data': "FAIL"},
+                status=status.HTTP_200_OK
+            )
+
+        rehive = Rehive(os.environ.get('REHIVE_AUTH_TOKEN'))
+
+        pull_request = request.data.get('pull_request')
+        pr_id = pull_request.get('id')
+        action = request.data.get('action')
+        merged = pull_request.get('merged')
+        user = pull_request.get('user')
+        username = user.get('login')
+
+        try:
+            _user = User.objects.get(username=username)
+            try:
+                user = rehive.admin.users.get(_user.identifier)
+            except APIException:
+                user = rehive.admin.users.create()
+        except User.DoesNotExist:
+            user = rehive.admin.users.create()
+            User.objects.create(
+                identifier=user.get('identifier'),
+                username=user.get('username')
+            )
+
+        if action == 'opened':
+            tx = rehive.admin.transactions.create_credit(
+                user=user.identifier, amount=1, status='pending', reference=str(pr_id)
+            ).get('id')
+        elif action == 'closed':
+            _tx = rehive.admin.transactions.get(
+                filter={'reference': str(pr_id)}
+            )[0]
+            if merged:
+                tx = rehive.admin.transactions.confirm(_tx.get('id'))
+            else:
+                tx = rehive.admin.transactions.fail(_tx.get('id'))
+
+        return Response(
+            {'status': 'success', 'data': tx},
+            status=status.HTTP_201_CREATED
+        )
+
+
+class VerifyView(GenericAPIView):
+    allowed_methods = ('GET',)
+    permission_classes = (AllowAny, )
+
+    def get(self, request, *args, **kwargs):
+        rehive = Rehive()
+        data = rehive.auth.tokens.verify(os.environ.get('REHIVE_AUTH_TOKEN'))
+
+        return Response({
+            'status': 'success',
+            'data': data
+        })

@@ -8,6 +8,10 @@ urlpatterns = (
     url(r'^$', views.root),
     url(r'^activate/$', views.ActivateView.as_view(), name='activate'),
     url(r'^deactivate/$', views.DeactivateView.as_view(), name='deactivate'),
+    url(r'^verify/$', views.VerifyView.as_view(), name='verify'),
+
+    # Github
+    url(r'^github/$', views.GithubView.as_view(), name='github-pr-view'),
 
     # Admin
     url(r'^admin/company/$', views.AdminCompanyView.as_view(), name='admin-company'),

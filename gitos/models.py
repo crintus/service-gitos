@@ -36,6 +36,7 @@ class Company(DateModel):
 
 class User(DateModel):
     identifier = models.UUIDField()
+    username = models.CharField(max_length=255, null=True, unique=True)
     token = models.CharField(max_length=200, null=True)
     company = models.ForeignKey('gitos.Company', null=True)
 
