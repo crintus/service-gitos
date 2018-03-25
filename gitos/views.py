@@ -261,6 +261,6 @@ class VerifyView(GenericAPIView):
         return Response({
             'status': 'success',
             'data': [
-                print(request),
+                print(request.data),
             ]
         })
